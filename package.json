@@ -1,0 +1,14 @@
+{
+  "name": "chengdu-chongqing-city-atlas",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "verify": "node scripts/verify-scenes.mjs",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": { "three": "0.186.0" },
+  "devDependencies": { "vite": "8.2.2" }
+}
