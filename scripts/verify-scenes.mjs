@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
+import { createHash } from 'node:crypto';
+import { cities, cityIds, loadCity } from '../src/city-catalog.js';
 import { createChengdu } from '../src/cities/chengdu.js';
 import { createChongqing } from '../src/cities/chongqing.js';
 import { createShenzhen } from '../src/cities/shenzhen.js';
@@ -27,6 +29,38 @@ const geometryLandmarks = {
   深圳: requiredLandmarks.深圳,
   香港: requiredLandmarks.香港
 };
+const additions = {
+  dalian: {name:'大连',ids:['xinghai-square','xinghai-bridge','zhongshan-square','donggang','bangchuidao','tiger-beach','fisherman-wharf','lianhuashan','lushun-station','baiyushan','jinshitan','heishijiao'],regions:['core','coast','peninsula']},
+  lijiang: {name:'丽江',ids:['dayan','waterwheels','sifang-street','mufu','black-dragon-pool','shuhe','baisha','yulong','blue-moon-valley','yuhu','shizi-hill','wenhai'],regions:['old-town','northern-villages','snow-mountain']},
+  okinawa: {name:'冲绳',ids:['shuri','kokusai','naminoue','american-village','manzamo','churaumi','kouri','nakijin','sefa-utaki','gyokusendo','senaga','zampa'],regions:['naha','central','north']},
+  wenzhou: {name:'温州',ids:['jiangxin','shuomen','wuma','nantang','oujiang-bridge','yandang','dalongqiu','nanxi','lishui-street','shiweiyan','dongtou','baizhangji'],regions:['city','mountains','outer']},
+  huangshan: {name:'黄山',ids:['yingkesong','tiandu','lianhua','yungu','guangmingding','feilaishi','xihai','shixin','hongcun','xidi','tunxi'],regions:['mountain-gates','north-sea','huizhou']},
+  hengdian: {name:'横店',ids:['qin-palace','ming-qing-palace','qingming-scroll','guangzhou-hongkong','dream-valley','new-yuanming','pingyan','dazhi-temple'],regions:['palace-scenes','river-scenes','hills-gardens']},
+  wuzhen: {name:'乌镇',ids:['dongzha','xizha','water-pavilions','bailian-tower','zhaoming-academy','muxin-museum','indigo-workshop','wuzhen-theatre'],regions:['east-water','west-water','arts']},
+  dali: {name:'大理',ids:['dali-old-town','three-pagodas','cangshan','erhai','longkan','xizhou','shuanglang','little-putuo','chongsheng','zhoucheng','wenbi','erhai-greenway'],regions:['old-city','west-shore','east-shore']},
+  zunyi: {name:'遵义',ids:['meeting-site','hongjun-street','laosha-lane','phoenix-hill','red-army-hill','xinpu-wetland','loushanguan','hailongtun','wujiang-village','gouba'],regions:['old-town','urban-green','northern-passes','southern-villages']},
+  xishui: {name:'习水',ids:['tucheng','sidu-memorial','qinggangpo','songjiao','tucheng-ferry','xijiu','danxia-valley','feige'],regions:['tucheng-history','chishui-river','northern-forest']}
+};
+const addedNames=new Set(Object.values(additions).map(entry=>entry.name));
+for(const entry of Object.values(additions)){
+  requiredLandmarks[entry.name]=entry.ids;requiredRegions[entry.name]=entry.regions;geometryLandmarks[entry.name]=entry.ids;
+}
+
+function geometryDigest(create){
+  const city=create();city.update(0,0);city.group.updateMatrixWorld(true);
+  const hash=createHash('sha256');
+  city.group.traverse(object=>{
+    hash.update(JSON.stringify(object.matrixWorld.elements));
+    const geometry=object.geometry;
+    if(geometry)for(const attribute of Object.values(geometry.attributes)){
+      const array=attribute.array||attribute.data.array;
+      hash.update(Buffer.from(array.buffer,array.byteOffset,array.byteLength));
+    }
+    if(object.instanceMatrix){const array=object.instanceMatrix.array;hash.update(Buffer.from(array.buffer,array.byteOffset,array.byteLength));}
+  });
+  return hash.digest('hex');
+}
+
 const round = n => Math.round(n * 1000) / 1000;
 
 function describeBox(box) {
@@ -294,6 +328,16 @@ function verify(name, create) {
       assert(!sceneBox.isEmpty(), `${name} 缺少可视几何`);
       finite([...sceneBox.min.toArray(), ...sceneBox.max.toArray()], `${name} 完整几何边界`);
       sceneBounds = describeBox(sceneBox);
+      if(addedNames.has(name)){
+        for(const [axis,suffix] of [['x','X'],['z','Z']]){
+          assert(sceneBox.min[axis]>=city.bounds[`min${suffix}`]-.75&&sceneBox.max[axis]<=city.bounds[`max${suffix}`]+.75,`${name} 真实场景几何越出底座 ${axis} 边界`);
+        }
+        assert(sceneBox.min.y>=-5.1,`${name} 山体或建筑穿出底座`);
+        let hasGlow=false;city.group.traverse(object=>{for(const material of [].concat(object.material||[]))if(material.userData.nightGlow)hasGlow=true;});
+        assert(hasGlow,`${name} 缺少夜景发光材质`);
+        assert(animated.length>=2,`${name} 应有至少两处真实动态`);
+        assert(stats.meshes<450,`${name} Mesh 数量过高，需合并或实例化`);
+      }
       landmarkGeometry = inspectLandmarkGeometry(city, name);
       animated.forEach(object => {
         initial.set(object.uuid, object.matrixWorld.clone());
@@ -325,7 +369,18 @@ function verify(name, create) {
 }
 
 try {
+  assert.equal(cityIds.length,14,'目的地入口应包含原四城与新增十地');
   const scenes = [['成都', createChengdu], ['重庆', createChongqing], ['深圳', createShenzhen], ['香港', createHongkong]].map(([name, create]) => verify(name, create));
+  for(const [id,entry] of Object.entries(additions)){
+    assert(Object.hasOwn(cities,id),`${id} 未注册目的地入口`);
+    const module=await cities[id].load(),create=await loadCity(id);
+    assert.deepEqual([...module.landmarkIds].sort(),[...entry.ids].sort(),`${id} 导出地标名单不一致`);
+    for(const field of ['title','seal','verse','coordinates','terrain','intro','description','category'])assert(typeof module.metadata[field]==='string'&&module.metadata[field].length>0,`${id} 缺少 ${field} 展示文案`);
+    const result=verify(entry.name,create);
+    const first=geometryDigest(create),second=geometryDigest(create);
+    assert.equal(first,second,`${id} 相同种子的几何与初始动画不确定`);
+    scenes.push({...result,id,deterministicGeometry:first});
+  }
   console.log(JSON.stringify({ ok: true, scenes }));
 } catch (error) {
   console.error(JSON.stringify({ ok: false, error: error.message }));

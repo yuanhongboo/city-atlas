@@ -1,21 +1,11 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { createChengdu } from './cities/chengdu.js';
-import { createChongqing } from './cities/chongqing.js';
-import { createShenzhen } from './cities/shenzhen.js';
-import { createHongkong } from './cities/hongkong.js';
+import { cities, cityIds, loadCity } from './city-catalog.js';
 import './style.css';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
-const cities = {
-  chengdu: { create: createChengdu, title:'成都', seal:'蓉', serial:'01', verse:'从少城茶香，到兴隆湖畔。', coordinates:'30.67° N · 104.07° E', terrain:'老城 · 南城 · 天府新区', intro:'沿着中轴，一路向南', description:'从文殊院、人民公园，到金融城双子塔，再沿天府大道走到兴隆湖。选择一个片区，继续这座城的记忆。', category:'此刻，俯瞰蓉城' },
-  chongqing: { create: createChongqing, title:'重庆', seal:'渝', serial:'02', verse:'九区各有景，一城皆山水。', coordinates:'29.56° N · 106.57° E', terrain:'传统主城九区', intro:'九区风景，慢慢逛', description:'从两江交汇到缙云山，从磁器口到南温泉。点一个区，看看这座城不同的日常。', category:'此刻，俯瞰九区', scopeLabel:'传统分区 · 口径说明 ↗', scopeSource:{url:'https://wap.cq.gov.cn/zwgk/zfxxgkml/szfwj/qtgw/202511/t20251107_15148513.html',label:'查看重庆市政府行政区划调整公告 ↗'} },
-  shenzhen: { create: createShenzhen, title:'深圳', seal:'深', serial:'03', verse:'从城市天际线，走向山海。', coordinates:'22.54° N · 114.06° E', terrain:'湾畔 · 街巷 · 山海', intro:'沿着海岸，遇见深圳', description:'从平安金融中心、市民中心，到后海人才公园与前海，再向东走到大梅沙和大鹏。选一片熟悉的地方，慢慢逛。', category:'此刻，俯瞰鹏城' },
-  hongkong: { create: createHongkong, title:'香港', seal:'港', serial:'04', verse:'渡轮穿过海港，灯火爬上山。', coordinates:'22.30° N · 114.17° E', terrain:'港岛 · 九龙 · 离岛', intro:'隔着维港，看见香港', description:'从中环的摩天楼，到尖沙咀钟楼与西九海滨；从旺角街巷，到大屿山的天坛大佛。跟着渡轮，在山与海之间停留。', category:'此刻，俯瞰香江' }
-};
-const cityIds=Object.keys(cities);
 const themes = {
   day: { bg:'#eaece3', ground:'#e3e5db', sun:'#fff2d7', hemi:'#eff9ef', hemiGround:'#b9bba1', sunIntensity:2.8, hemiIntensity:1.35, exposure:1.0, glow:.045, sunPosition:[-100,170,100] },
   sunset: { bg:'#e9d5c0', ground:'#d4bd9f', sun:'#ffb477', hemi:'#e7d5cb', hemiGround:'#a79076', sunIntensity:3.65, hemiIntensity:1.55, exposure:1.05, glow:.5, sunPosition:[-155,70,95] },
@@ -28,6 +18,8 @@ let elapsed=0, lastTime=performance.now(), latestFrame=0;
 let activeRegion='all';
 let tourRoute=[];
 const cache = new Map(), glowMaterials = new Set();
+let switchVersion=0,initializing=true;
+const MAX_CACHED_CITIES=3;
 const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const TOUR_DURATION=10;
 const projected=new THREE.Vector3(), cameraDirection=new THREE.Vector3();
@@ -82,7 +74,7 @@ function renderNearby(landmark,captionText='附近逛逛'){
   neighbours.forEach(place=>{const button=document.createElement('button');button.textContent=(place.shortName||place.name)+' ↗';button.title=place.name;button.addEventListener('click',()=>selectPlace(place.id));container.append(button);});
 }
 function regionDefinitions(){return city?.regions||[];}
-function usesRegionOverview(){const regions=regionDefinitions();return regions.length>3&&regions.every(region=>region.labelPosition);}
+function usesRegionOverview(){const regions=regionDefinitions();return regions.length>=3&&regions.every(region=>region.labelPosition);}
 function syncRegionButtons(){$$('#region-list button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.region===activeRegion)));$('#region-select').value=activeRegion;}
 function updateScrollHint(){
   const list=$('#landmark-list'),edge=list.getBoundingClientRect().bottom;
@@ -150,7 +142,7 @@ function renderList(){
     if(!manyRegions){const button=document.createElement('button');button.dataset.region=region.id;button.textContent=region.name;button.setAttribute('aria-pressed',String(region.id==='all'));button.addEventListener('click',()=>selectRegion(region.id));$('#region-list').append(button);}
   });
   const leaders=document.createElementNS('http://www.w3.org/2000/svg','svg');leaders.classList.add('district-leaders');leaders.setAttribute('aria-hidden','true');$('#labels').append(leaders);
-  if(manyRegions)regionDefinitions().forEach(region=>{
+  if(usesRegionOverview())regionDefinitions().forEach(region=>{
     if(!region.labelPosition)return;
     const label=document.createElement('button');label.className='map-label district-label';label.dataset.region=region.id;label.textContent=region.name;label.setAttribute('aria-label',`探索${region.name}`);label.addEventListener('click',()=>selectRegion(region.id));$('#labels').append(label);
     const leader=document.createElementNS('http://www.w3.org/2000/svg','line');leaders.append(leader);
@@ -180,7 +172,7 @@ function renderMinimap(){
   const {minX,maxX,minZ,maxZ}=city.bounds;
   const project=([x,z])=>[12+(x-minX)/(maxX-minX)*176,12+(z-minZ)/(maxZ-minZ)*112];
   if(city.minimap?.paths){
-    element('path',{d:'M11 12H189V124H11Z',fill:'#d7dfca',stroke:'none'});
+    element('path',{d:'M11 12H189V124H11Z',fill:city.minimap.background||'#d7dfca',stroke:'none'});
     city.minimap.paths.forEach(path=>{const points=path.points.map(p=>project(p).join(',')).join(' ');element(path.closed?'polygon':'polyline',{points,fill:path.closed?path.color:'none',stroke:path.closed?'none':path.color,'stroke-width':path.closed?0:Math.max(.7,(path.width||2)*112/(maxZ-minZ))});});
   }else if(cityId==='chengdu'){
     element('path',{d:'M11 12H189V124H11Z',fill:'#d7dfca',stroke:'none'});
@@ -210,21 +202,84 @@ function updateTheme(now){
   glowMaterials.forEach(m=>m.emissiveIntensity=THREE.MathUtils.lerp(from.glow,to.glow,e));
   if(u===1)themeTween=null;
 }
-function switchCity(id,push=true){
-  if(!cities[id]||id===cityId)return;stopTour();if(city)scene.remove(city.group);
-  cityId=id;if(!cache.has(id))cache.set(id,cities[id].create());city=cache.get(id);scene.add(city.group);
+function trimCityCache(){
+  while(cache.size>MAX_CACHED_CITIES){
+    const oldest=cache.keys().next().value,retired=cache.get(oldest);cache.delete(oldest);
+    const keptGeometry=new Set(),keptMaterials=new Set();
+    cache.forEach(value=>value.group.traverse(object=>{if(object.geometry)keptGeometry.add(object.geometry);for(const material of [].concat(object.material||[]))keptMaterials.add(material);}));
+    const geometry=new Set(),materials=new Set();
+    retired.group.traverse(object=>{if(object.isInstancedMesh)object.dispose();if(object.geometry)geometry.add(object.geometry);for(const material of [].concat(object.material||[]))materials.add(material);});
+    geometry.forEach(value=>{if(!keptGeometry.has(value))value.dispose();});
+    materials.forEach(value=>{if(!keptMaterials.has(value))value.dispose();});
+  }
+}
+function writeCityLocation(id,method='pushState',place=null,region='all'){
+  const url=new URL(location.href);url.searchParams.set('city',id);url.searchParams.delete('place');url.searchParams.delete('region');
+  if(place)url.searchParams.set('place',place);else if(region!=='all')url.searchParams.set('region',region);
+  if(url.href!==location.href)history[method]({city:id},'',url);
+}
+async function switchCity(id,push=true){
+  if(!Object.hasOwn(cities,id))id=cityIds[0];
+  const request=++switchVersion;
+  if(id===cityId){if(push){showOverview();writeCityLocation(id);}$('#destination-button').setAttribute('aria-busy','false');$('#destination-status').textContent=`${cityIds.length} 个目的地`;return true;}
+  stopTour();$('#destination-button').setAttribute('aria-busy','true');$('#destination-status').textContent=`正在展开${cities[id].title}`;
+  try{
+  if(!cache.has(id)){
+    const create=await loadCity(id);
+    if(request!==switchVersion)return false;
+    cache.set(id,create());
+  }
+  if(request!==switchVersion)return false;
+  const next=cache.get(id);cache.delete(id);cache.set(id,next);
+  if(city)scene.remove(city.group);
+  cityId=id;city=next;scene.add(city.group);
   const b=city.bounds,span=Math.hypot(b.maxX-b.minX,b.maxZ-b.minZ),shadowExtent=span*.6;
   sunlight.target.position.set((b.minX+b.maxX)/2,0,(b.minZ+b.maxZ)/2);sunlight.target.updateMatrixWorld();
   Object.assign(sunlight.shadow.camera,{left:-shadowExtent,right:shadowExtent,top:shadowExtent,bottom:-shadowExtent});sunlight.shadow.camera.updateProjectionMatrix();
   controls.maxDistance=Math.max(1250,span*4.5);
   glowMaterials.clear();city.group.traverse(o=>{if(o.material)for(const m of(Array.isArray(o.material)?o.material:[o.material]))if(m.userData?.nightGlow)glowMaterials.add(m);});
-  const data=cities[id];$('#city-title').replaceChildren(document.createTextNode(data.title));const seal=document.createElement('span');seal.textContent=data.seal;$('#city-title').append(seal);
+  const data=cities[id];$('#city-title').replaceChildren(document.createTextNode(data.title));const seal=document.createElement('span');seal.textContent=data.seal;$('#city-title').append(seal);$('#city-title').classList.toggle('long-title',data.title.length>2);
   $('#city-serial').textContent=`城市手记 / ${data.serial}`;$('#city-verse').textContent=data.verse;$('#city-coordinates').textContent=data.coordinates;$('#city-terrain').textContent=data.terrain;
   $$('[data-city]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.city===id)));
   $('#city-select').value=id;
+  $('#destination-current').textContent=data.title;
   document.title=`${data.title} · 城间漫游`;document.documentElement.dataset.city=id;renderList();showOverview(false);setTheme(currentTheme,true);
-  if(push){const url=new URL(location.href);url.searchParams.set('city',id);url.searchParams.delete('place');url.searchParams.delete('region');history.pushState({city:id},'',url);}
+  if(push)writeCityLocation(id);
   $('#scene').setAttribute('aria-label',`${data.title}交互式三维城市沙盘，${city.landmarks.length}个可探索地标`);
+  trimCityCache();return true;
+  }catch(error){
+    if(request!==switchVersion)return false;if(!city)throw error;console.error(error);
+    if(request===switchVersion){writeCityLocation(cityId,'replaceState',selectedId,activeRegion);$('#city-select').value=cityId;toast('这座城暂时没能展开，请重新选择重试。');}return false;
+  }finally{
+    if(request===switchVersion){$('#destination-button').setAttribute('aria-busy','false');$('#destination-status').textContent=`${cityIds.length} 个目的地`;}
+  }
+}
+
+async function restoreLocation(){
+  const params=new URLSearchParams(location.search),id=params.get('city')||cityIds[0];
+  if(!await switchCity(id,false))return;
+  const light=params.get('light');if(themes[light])setTheme(light,true);
+  if(params.get('place'))selectPlace(params.get('place'));else if(params.get('region'))selectRegion(params.get('region'));else showOverview(false);
+}
+
+function renderDestinations(){
+  const grid=$('#destination-grid');grid.replaceChildren();
+  for(const id of cityIds){
+    const entry=cities[id],button=document.createElement('button');button.className='destination-card';button.dataset.city=id;button.dataset.search=`${entry.title} ${entry.region} ${entry.tagline} ${id}`.toLowerCase();button.setAttribute('aria-pressed',String(id===cityId));
+    const seal=document.createElement('span');seal.className='destination-seal';seal.textContent=entry.seal;
+    const text=document.createElement('span'),name=document.createElement('strong'),description=document.createElement('small');name.textContent=entry.title;description.textContent=entry.tagline;text.append(name,description);
+    const arrow=document.createElement('span');arrow.className='destination-arrow';arrow.textContent='↗';button.append(seal,text,arrow);
+    button.addEventListener('click',()=>{$('#destinations-dialog').close();switchCity(id);});grid.append(button);
+  }
+  $('#destination-status').textContent=`${cityIds.length} 个目的地`;
+  $('#edition').textContent=`城市记忆 · ${cityIds.length} 地漫游`;
+  $('#shortcut-note').textContent=`数字 1–9：前九个目的地 · 其余从目的地目录选择`;
+}
+function filterDestinations(){
+  const query=$('#destination-search').value.trim().toLowerCase();let count=0;
+  $$('#destination-grid button').forEach(button=>{button.hidden=!button.dataset.search.includes(query);if(!button.hidden)count++;});
+  $('#destination-empty').hidden=count>0;
+  $('#destination-result-count').textContent=`${count} 个目的地`;
 }
 function toggleTour(){
   if(tour){stopTour();return;}const focus=city.landmarks.find(l=>l.id===selectedId);tourRoute=city.landmarks.filter(l=>focus?.cluster?l.cluster===focus.cluster:activeRegion==='all'||l.zone===activeRegion).map(l=>l.id);if(!tourRoute.length)return;
@@ -279,10 +334,13 @@ async function photo(){
   }catch(error){console.error(error);toast('照片暂时没有保存成功，请再试一次。');}
 }
 function bindEvents(){
-  $$('[data-city]').forEach(b=>b.addEventListener('click',()=>switchCity(b.dataset.city)));
+  renderDestinations();
+  $('#destination-button').addEventListener('click',()=>{$('#destination-search').value='';filterDestinations();$('#destinations-dialog').showModal();});
+  $('#destination-search').addEventListener('input',filterDestinations);
+  $('#close-destinations').addEventListener('click',()=>$('#destinations-dialog').close());
   $('#city-select').replaceChildren(...cityIds.map(id=>new Option(`${cities[id].serial} ${cities[id].title}`,id)));
   $('#city-select').addEventListener('change',e=>switchCity(e.target.value));
-  $$('[data-light]').forEach(b=>b.addEventListener('click',()=>setTheme(b.dataset.light)));
+  $$('[data-light]').forEach(b=>b.addEventListener('click',()=>{setTheme(b.dataset.light);const url=new URL(location.href);url.searchParams.set('light',b.dataset.light);history.replaceState({city:cityId},'',url);}));
   $('#reset-button').addEventListener('click',()=>showOverview());$('#tour-button').addEventListener('click',toggleTour);
   $('#place-select').addEventListener('change',e=>e.target.value?selectPlace(e.target.value):showOverview());
   $('#next-place').addEventListener('click',()=>{const i=city.landmarks.findIndex(l=>l.id===selectedId);selectPlace(city.landmarks[(i+1)%city.landmarks.length].id);});
@@ -300,8 +358,8 @@ function bindEvents(){
   $('#about-dialog').addEventListener('click',e=>{if(e.target===$('#about-dialog')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});
   $('#search').addEventListener('input',()=>{activeRegion='all';syncRegionButtons();filterPlaces();});
   controls.addEventListener('start',()=>{tween=null;stopTour();setOrbit(false);});
-  addEventListener('resize',resize);addEventListener('popstate',()=>switchCity(new URLSearchParams(location.search).get('city')||'chengdu',false));
-  addEventListener('keydown',e=>{if(e.target.matches('input,textarea,select')||document.querySelector('dialog[open]')||e.ctrlKey||e.metaKey||e.altKey)return;if(e.code==='Space'){e.preventDefault();toggleTour();}if(e.key==='Escape')showOverview();const nextCity=cityIds[Number(e.key)-1];if(nextCity)switchCity(nextCity);});
+  addEventListener('resize',resize);addEventListener('popstate',()=>{if(!initializing)restoreLocation();});
+  addEventListener('keydown',e=>{if(initializing||!city||e.target.matches('input,textarea,select')||document.querySelector('dialog[open]')||e.ctrlKey||e.metaKey||e.altKey)return;if(e.code==='Space'){e.preventDefault();toggleTour();}if(e.key==='Escape')showOverview();const nextCity=/^[1-9]$/.test(e.key)?cityIds[Number(e.key)-1]:null;if(nextCity)switchCity(nextCity);});
   document.addEventListener('visibilitychange',()=>{lastTime=performance.now();});
   renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();toast('图形显示暂时中断，正在恢复。');});renderer.domElement.addEventListener('webglcontextrestored',()=>{toast('城市画面已恢复。');});
 }
@@ -329,8 +387,8 @@ async function start(){
   const pmrem=new THREE.PMREMGenerator(renderer);const room=new RoomEnvironment();const environment=pmrem.fromScene(room,.035);scene.environment=environment.texture;scene.environmentIntensity=.23;room.dispose();pmrem.dispose();
   ground=new THREE.Mesh(new THREE.PlaneGeometry(5000,5000),new THREE.MeshStandardMaterial({color:themes.day.ground,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-5.3;ground.receiveShadow=true;scene.add(ground);
   bindEvents();resize();const params=new URLSearchParams(location.search);let savedTheme;try{savedTheme=localStorage.getItem('city-atlas-light');}catch{}currentTheme=params.get('light')||(themes[savedTheme]?savedTheme:'day');if(!themes[currentTheme])currentTheme='day';
-  switchCity(cities[params.get('city')]?params.get('city'):'chengdu',false);resize();updateTheme(performance.now());renderer.render(scene,camera);updateLabels();
+  let loadedLocation;do{loadedLocation=location.href;try{await restoreLocation();}catch(error){if(location.href===loadedLocation)throw error;}}while(location.href!==loadedLocation);
+  initializing=false;resize();updateTheme(performance.now());renderer.render(scene,camera);updateLabels();
   $('#loading').classList.add('done');document.documentElement.dataset.ready='true';lastTime=performance.now();requestAnimationFrame(frame);
-  if(params.get('place'))selectPlace(params.get('place'));else if(params.get('region'))selectRegion(params.get('region'));
 }
 start().catch(error=>{console.error(error);$('#loading h2').textContent='城市暂时没能展开';$('#loading-text').textContent='请刷新重试，并确认浏览器已开启硬件加速。';$('.loading-track').style.display='none';});

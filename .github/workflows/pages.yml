@@ -1,4 +1,4 @@
-name: 发布双城地图
+name: 发布城间漫游
 
 on:
   push:
