@@ -2,15 +2,31 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createChengdu } from '../src/cities/chengdu.js';
 import { createChongqing } from '../src/cities/chongqing.js';
+import { createShenzhen } from '../src/cities/shenzhen.js';
+import { createHongkong } from '../src/cities/hongkong.js';
 
 const times = [0, 0.016, 1, 10, 60, 600, 3600];
 const vector = new THREE.Vector3();
 const requiredLandmarks = {
   成都: ['tianfu', 'kuanzhai', 'taikooli', 'anshun', 'wangjiang', 'wuhou', 'global', 'panda', 'wenshu', 'renmin', 'twin-towers', 'expo', 'xinglong', 'lankwaifong', 'jiuyanqiao', 'tianfu-1st', 'tianfu-2nd', 'tianfu-3rd', 'tianfu-4th', 'tianfu-5th'],
-  重庆: ['raffles', 'hongyadong', 'qiansimen', 'jiefangbei', 'grand-theatre', 'liziba', 'cableway', 'nanshan', 'auditorium', 'guanyinqiao', 'danzishi', 'ciqikou', 'cqu', 'huangjueping', 'zoo', 'industrial-museum', 'yidu', 'jinyun', 'swu', 'central-park', 'airport', 'longzhouwan', 'nanwenquan', 'university-town', 'cqu-huxi', 'scfai-huxi', 'xijie']
+  重庆: ['raffles', 'hongyadong', 'qiansimen', 'jiefangbei', 'grand-theatre', 'liziba', 'cableway', 'nanshan', 'auditorium', 'guanyinqiao', 'danzishi', 'ciqikou', 'cqu', 'huangjueping', 'zoo', 'industrial-museum', 'yidu', 'jinyun', 'swu', 'central-park', 'airport', 'longzhouwan', 'nanwenquan', 'university-town', 'cqu-huxi', 'scfai-huxi', 'xijie'],
+  深圳: ['pingan', 'civic-center', 'lianhuashan', 'huaqiangbei', 'diwang', 'kk100', 'dongmen', 'talent-park', 'spring-bamboo', 'shenzhen-university', 'window-world', 'happy-harbour', 'qianhai', 'dameisha', 'dapeng', 'universiade'],
+  香港: ['ifc', 'bank-of-china', 'victoria-peak', 'hkcec', 'midlevels', 'star-ferry', 'clock-tower', 'avenue-stars', 'west-kowloon', 'icc', 'wong-tai-sin', 'mongkok', 'chi-lin', 'tian-tan-buddha', 'hk-airport', 'tsing-ma']
 };
 const chongqingRegions = ['yuzhong', 'jiangbei', 'nanan', 'shapingba', 'jiulongpo', 'dadukou', 'beibei', 'yubei', 'banan'];
-const newChongqingLandmarks = requiredLandmarks.重庆.slice(8);
+const requiredRegions = {
+  成都: ['old', 'south', 'tianfu'],
+  重庆: chongqingRegions,
+  深圳: ['futian', 'luohu', 'nanshan', 'west-bay', 'east-coast'],
+  香港: ['island', 'harbour', 'kowloon', 'islands']
+};
+const geometryLandmarks = {
+  // Existing Chengdu batches and Chongqing's first eight landmarks predate
+  // landmark geometry metadata. Preserve their checks without claiming coverage.
+  重庆: requiredLandmarks.重庆.slice(8),
+  深圳: requiredLandmarks.深圳,
+  香港: requiredLandmarks.香港
+};
 const round = n => Math.round(n * 1000) / 1000;
 
 function describeBox(box) {
@@ -66,15 +82,15 @@ function inspectScene(city, name, time) {
     finite(object.matrix.elements, `${label} 局部矩阵`);
     finite(object.matrixWorld.elements, `${label} 世界矩阵`);
     for (const material of [].concat(object.material || [])) {
+      if (material.userData.nightGlow || object.userData.nightGlow) assert(material.emissive?.isColor, `${label} 夜景材质缺少 emissive`);
       if (materials.has(material)) continue;
       materials.add(material);
       for (const property of ['color', 'emissive']) {
         if (material[property]) finite(material[property].toArray(), `${label} 材质 ${property}`);
       }
-      for (const property of ['opacity', 'roughness', 'metalness', 'emissiveIntensity']) {
-        if (material[property] !== undefined) finite([material[property]], `${label} 材质 ${property}`);
+      for (const [property, value] of Object.entries(material)) {
+        if (typeof value === 'number') finite([value], `${label} 材质 ${property}`);
       }
-      if (object.userData.nightGlow) assert(material.emissive?.isColor, `${label} 夜景材质缺少 emissive`);
     }
     if (object.isMesh) meshes++;
     if (object.isInstancedMesh) {
@@ -100,10 +116,10 @@ function inspectScene(city, name, time) {
   return { meshes, instances, geometries: geometries.size, materials: materials.size, vertices };
 }
 
-function inspectDistrictGeometry(city) {
+function inspectLandmarkGeometry(city, name) {
   // Inspect rendered geometry, including meshes tagged after material batching.
   // A surviving empty Group or metadata alone is not a representative model.
-  const boxes = new Map(newChongqingLandmarks.map(id => [id, new THREE.Box3()]));
+  const boxes = new Map((geometryLandmarks[name] || []).map(id => [id, new THREE.Box3()]));
   city.group.traverse(object => {
     if (!object.isMesh || !object.geometry?.attributes.position?.count) return;
     for (let ancestor = object; ancestor; ancestor = ancestor.parent) {
@@ -116,15 +132,15 @@ function inspectDistrictGeometry(city) {
   const districtsWithGeometry = new Set();
   const geometryEvidence = {};
   for (const [id, box] of boxes) {
-    assert(!box.isEmpty(), `重庆 ${id} 缺少关联到 landmarkId 的真实 Mesh 几何`);
-    finite([...box.min.toArray(), ...box.max.toArray()], `重庆 ${id} 几何边界`);
+    assert(!box.isEmpty(), `${name} ${id} 缺少关联到 landmarkId 的真实 Mesh 几何`);
+    finite([...box.min.toArray(), ...box.max.toArray()], `${name} ${id} 几何边界`);
     const size = box.getSize(new THREE.Vector3());
-    assert(size.x > 1 && size.z > 1 && size.y > .25, `重庆 ${id} 几何尺寸不足以构成独立模型`);
+    assert(size.x > 1 && size.z > 1 && size.y > .25, `${name} ${id} 几何尺寸不足以构成独立模型`);
     const landmark = city.landmarks.find(place => place.id === id);
     districtsWithGeometry.add(landmark.zone);
     geometryEvidence[id] = describeBox(box);
   }
-  for (const id of chongqingRegions) assert(districtsWithGeometry.has(id), `重庆 ${id} 缺少可追踪的代表模型几何`);
+  if (boxes.size) for (const id of requiredRegions[name]) assert(districtsWithGeometry.has(id), `${name} ${id} 缺少可追踪的代表模型几何`);
   return geometryEvidence;
 }
 
@@ -159,23 +175,26 @@ function verify(name, create) {
   assert.equal(typeof city.update, 'function', `${name} 必须支持 update`);
   assert(Array.isArray(city.landmarks), `${name} 必须返回地标数组`);
   assert.equal(city.stats?.landmarks, city.landmarks.length, `${name} stats.landmarks 与实际地标数量不符`);
+  for (const [key, value] of Object.entries(city.stats)) {
+    if (typeof value !== 'number') continue;
+    assert(Number.isFinite(value) && value >= 0, `${name} stats.${key} 必须是非负有限数值`);
+  }
   inspectBounds(city, name);
   const regionIds = new Set();
-  if (name === '成都' || name === '重庆') {
-    assert(Array.isArray(city.regions) && city.regions.length > 0, `${name} 缺少片区定义`);
-    for (const region of city.regions) {
-      assert(typeof region.id === 'string' && region.id.length > 0, `${name} 片区缺少 id`);
-      assert(!regionIds.has(region.id), `${name} 片区 id 重复：${region.id}`);
-      regionIds.add(region.id);
-      assert(typeof region.name === 'string' && region.name.length > 0, `${name} ${region.id} 片区缺少名称`);
-      inspectView(region.position, region.target, `${name} ${region.id} 片区`);
-      insideBounds(region.target, city.bounds, `${name} ${region.id} 片区.target`);
-      if (name === '重庆') {
-        viewpoint(region.labelPosition, `${name} ${region.id} 片区.labelPosition`);
-        insideBounds(region.labelPosition, city.bounds, `${name} ${region.id} 片区.labelPosition`, 0);
-      }
+  assert(Array.isArray(city.regions) && city.regions.length > 0, `${name} 缺少片区定义`);
+  for (const region of city.regions) {
+    assert(typeof region.id === 'string' && region.id.length > 0, `${name} 片区缺少 id`);
+    assert(!regionIds.has(region.id), `${name} 片区 id 重复：${region.id}`);
+    regionIds.add(region.id);
+    assert(typeof region.name === 'string' && region.name.length > 0, `${name} ${region.id} 片区缺少名称`);
+    inspectView(region.position, region.target, `${name} ${region.id} 片区`);
+    insideBounds(region.target, city.bounds, `${name} ${region.id} 片区.target`);
+    if (name !== '成都' || region.labelPosition !== undefined) {
+      viewpoint(region.labelPosition, `${name} ${region.id} 片区.labelPosition`);
+      insideBounds(region.labelPosition, city.bounds, `${name} ${region.id} 片区.labelPosition`, 0);
     }
   }
+  assert.deepEqual([...regionIds].sort(), [...requiredRegions[name]].sort(), `${name} 片区必须与约定集合一致`);
   if (name === '重庆') {
     assert.deepEqual([...regionIds].sort(), [...chongqingRegions].sort(), '重庆必须提供传统主城九区且无重复或额外分区');
     assert(typeof city.scopeNote === 'string' && /传统/.test(city.scopeNote) && /现行/.test(city.scopeNote), '重庆 scopeNote 必须区分传统城市分区与现行行政区划');
@@ -244,17 +263,25 @@ function verify(name, create) {
 
   const animated = [];
   city.group.traverse(object => {
-    if (object.userData.cityMotion) animated.push(object);
+    if (!object.userData.cityMotion) return;
+    let renderedMeshes = 0;
+    object.traverse(child => {
+      if (child.isMesh && child.geometry?.attributes.position?.count) renderedMeshes++;
+    });
+    assert(renderedMeshes > 0, `${name} ${object.name || object.id} 动态对象缺少真实 Mesh`);
+    animated.push(object);
   });
   assert(animated.length > 0, `${name} 缺少标记的动态对象`);
   if (name === '成都') assert.equal(animated.length, 12, '成都应保留既有 12 个动态对象');
   if (name === '重庆') assert(animated.length >= 10, '重庆应保留既有 10 个动态对象');
   const initial = new Map();
+  const initialPositions = new Map();
+  const transformed = new Set();
   const moved = new Set();
   let stats;
   let base;
   let sceneBounds;
-  let districtGeometry;
+  let landmarkGeometry;
   let previous = 0;
   for (const time of times) {
     assert.doesNotThrow(() => city.update(time, time - previous), `${name} update(${time}) 抛错`);
@@ -267,21 +294,38 @@ function verify(name, create) {
       assert(!sceneBox.isEmpty(), `${name} 缺少可视几何`);
       finite([...sceneBox.min.toArray(), ...sceneBox.max.toArray()], `${name} 完整几何边界`);
       sceneBounds = describeBox(sceneBox);
-      if (name === '重庆') districtGeometry = inspectDistrictGeometry(city);
-      animated.forEach(object => initial.set(object.uuid, object.getWorldPosition(new THREE.Vector3())));
+      landmarkGeometry = inspectLandmarkGeometry(city, name);
+      animated.forEach(object => {
+        initial.set(object.uuid, object.matrixWorld.clone());
+        initialPositions.set(object.uuid, object.getWorldPosition(new THREE.Vector3()));
+      });
     } else {
       animated.forEach(object => {
-        if (object.getWorldPosition(vector).distanceToSquared(initial.get(object.uuid)) > 1e-10) moved.add(object.uuid);
+        // Rotating a wheel around its fixed centre changes its rendered transform
+        // without changing its position. Compare all matrix elements for motion.
+        const before = initial.get(object.uuid).elements;
+        if (object.matrixWorld.elements.some((value, index) => Math.abs(value - before[index]) > 1e-8)) transformed.add(object.uuid);
+        if (object.getWorldPosition(vector).distanceToSquared(initialPositions.get(object.uuid)) > 1e-10) moved.add(object.uuid);
       });
     }
     previous = time;
   }
-  assert.equal(moved.size, animated.length, `${name} 仍有标记为动态的对象在所有采样时刻均未发生位移`);
-  return { city: name, landmarks: ids.size, landmarkIds: [...ids], regions: regionCounts, bounds: city.bounds, ...stats, animatedObjects: animated.length, movingObjects: moved.size, samples: times.length, base, sceneBounds, ...(districtGeometry ? { districtGeometry } : {}), landmarkGeometryCheck: '检查整体几何、相机及重庆九区新增模型几何存在；逐地标视觉辨识仍需浏览器验收' };
+  assert.equal(transformed.size, animated.length, `${name} 仍有标记为动态的对象在所有采样时刻均未发生变换`);
+  // Chengdu boats/cars and Chongqing trains/cable cars/boats must still travel.
+  if (name === '成都' || name === '重庆') assert.equal(moved.size, animated.length, `${name} 既有交通动态对象在所有采样时刻均未发生位移`);
+  return {
+    city: name, landmarks: ids.size, landmarkIds: [...ids], regions: regionCounts,
+    bounds: city.bounds, declaredStats: city.stats, ...stats,
+    animatedObjects: animated.length, transformedObjects: transformed.size,
+    movingObjects: moved.size, fixedCentreAnimatedObjects: transformed.size - moved.size,
+    samples: times.length, sampleTimes: times, base, sceneBounds,
+    landmarkGeometry,
+    landmarkGeometryCheck: `${Object.keys(landmarkGeometry).length} 处地标的关联 Mesh 几何已验证；逐地标视觉辨识仍需浏览器验收`
+  };
 }
 
 try {
-  const scenes = [['成都', createChengdu], ['重庆', createChongqing]].map(([name, create]) => verify(name, create));
+  const scenes = [['成都', createChengdu], ['重庆', createChongqing], ['深圳', createShenzhen], ['香港', createHongkong]].map(([name, create]) => verify(name, create));
   console.log(JSON.stringify({ ok: true, scenes }));
 } catch (error) {
   console.error(JSON.stringify({ ok: false, error: error.message }));

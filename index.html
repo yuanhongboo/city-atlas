@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#eeeee6" />
-  <meta name="description" content="一座城，一段停留。探索成都与重庆的交互式 3D 微缩城市，漫游街巷、桥梁和两江之间。" />
-  <title>城间漫游 · 成都与重庆</title>
+  <meta name="description" content="一座城，一段停留。探索成都、重庆、深圳和香港的交互式 3D 微缩城市，漫游街巷、桥梁与山海之间。" />
+  <title>城间漫游 · 成都、重庆、深圳与香港</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 </head>
 <body>
@@ -21,7 +21,10 @@
       <nav class="city-switch" aria-label="切换城市">
         <button data-city="chengdu" aria-pressed="true"><span>01</span>成都</button>
         <button data-city="chongqing" aria-pressed="false"><span>02</span>重庆</button>
+        <button data-city="shenzhen" aria-pressed="false"><span>03</span>深圳</button>
+        <button data-city="hongkong" aria-pressed="false"><span>04</span>香港</button>
       </nav>
+      <label class="mobile-city-switch"><span>城市</span><select id="city-select" aria-label="切换城市"></select></label>
       <div class="header-right"><span class="live-dot"></span><span>可交互的微缩城市</span><button id="about-button" aria-label="关于这张地图" class="icon-button">?</button></div>
     </header>
     <aside class="explorer" aria-label="城市地标导航">
@@ -53,7 +56,7 @@
       <button id="reset-button" class="control-button" aria-label="回到全景" title="回到全景"><svg viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg></button>
     </div>
     <section class="place-card" id="place-card" aria-live="polite">
-      <div class="place-eyebrow"><span id="place-category">此刻，俯瞰蓉城</span><span id="place-number">01 / 02</span><select id="place-select" aria-label="选择城市地标"></select></div>
+      <div class="place-eyebrow"><span id="place-category">此刻，俯瞰蓉城</span><span id="place-number">01 / 04</span><select id="place-select" aria-label="选择城市地标"></select></div>
       <h2 id="place-title">慢下来，看看成都。</h2>
       <p id="place-description">锦江绕过街巷，绿荫藏着茶馆。点一个地标，飞到那段熟悉的城市记忆里。</p>
       <nav id="nearby-places" class="nearby-places" aria-label="附近地标" hidden></nav>
@@ -61,14 +64,14 @@
     </section>
     <section class="mini-map" aria-label="城市位置缩略图"><div><span>城市一瞥</span><span id="mini-view">全景</span></div><svg id="minimap" viewBox="0 0 200 136" role="img" aria-label="地标相对位置"></svg></section>
     <footer class="bottom-bar">
-      <span class="edition">城市记忆 · 双城篇</span>
+      <span class="edition">城市记忆 · 四城篇</span>
       <div class="canvas-tools"><button id="labels-button" aria-pressed="true"><svg viewBox="0 0 20 20"><path d="M15 8c0 4-5 9-5 9S5 12 5 8a5 5 0 1 1 10 0Z"/><circle cx="10" cy="8" r="1.5"/></svg>地标</button><span></span><button id="orbit-button" aria-pressed="false"><svg viewBox="0 0 20 20"><ellipse cx="10" cy="10" rx="8" ry="4" transform="rotate(-25 10 10)"/><path d="m15 3 2 3-4 1"/></svg>环绕</button><span></span><button id="photo-button"><svg viewBox="0 0 20 20"><path d="M2 6h4l1-2h6l1 2h4v11H2Z"/><circle cx="10" cy="11" r="3"/></svg>留张照片</button></div>
       <span class="gestures"><span class="desktop-gesture">拖动旋转 · 滚轮缩放 · 右键平移</span><span class="mobile-gesture">单指旋转 · 双指缩放与平移</span></span>
     </footer>
     <div id="loading" role="status"><div class="loading-mark">城</div><h2>一座城，正在展开。</h2><p id="loading-text">搭起街巷，点亮记忆</p><span class="loading-track"></span></div>
     <div id="toast" role="status"></div>
     <dialog id="places-dialog" class="places-dialog"><button id="close-places" class="dialog-close" aria-label="关闭地标目录">×</button><span class="eyebrow">把熟悉的地方，一一找到</span><h2 id="catalog-title">成都 · 地标目录</h2><p class="catalog-note" id="catalog-note"></p><label id="catalog-filter-wrap" class="catalog-filter-wrap" hidden>按片区找 <select id="catalog-filter" aria-label="筛选地标目录分区"></select></label><div id="catalog-sections" class="catalog-sections"></div></dialog>
-    <dialog id="about-dialog"><button id="close-about" class="dialog-close" aria-label="关闭地图说明">×</button><span class="eyebrow">关于这次漫游</span><h2>把走过的城市，<br>放在手心里。</h2><p>这是一组以成都、重庆为原型的交互式建筑沙盘。地标与城市格局参考公开资料，建筑以程序化几何重新演绎。</p><p>为了把熟悉的地方放进同一个画面，部分距离、比例与地形作了艺术化压缩。它适合欣赏和探索，不能用于实际导航。</p><div id="about-scope" class="about-scope" hidden><strong>本图的分区口径</strong><p id="scope-detail"></p><a href="https://wap.cq.gov.cn/zwgk/zfxxgkml/szfwj/qtgw/202511/t20251107_15148513.html" target="_blank" rel="noreferrer">查看重庆市政府行政区划调整公告 ↗</a></div><div class="about-controls"><strong>操作小记</strong><p>点击地标：飞到近处<br>拖动：旋转视角 · 右键：平移<br>滚轮或双指：缩放<br>空格：开始 / 暂停导览 · Esc：回到全景</p></div><p class="source-note">灵感来自 <a href="https://x.com/NFT_Chen/status/2096143589151756638" target="_blank" rel="noreferrer">SuSu 的杭州 Three.js 演示 ↗</a>。<br>这两座城市的模型与交互在本项目独立制作。</p></dialog>
+    <dialog id="about-dialog"><button id="close-about" class="dialog-close" aria-label="关闭地图说明">×</button><span class="eyebrow">关于这次漫游</span><h2>把走过的城市，<br>放在手心里。</h2><p>这是一组以成都、重庆、深圳和香港为原型的交互式建筑沙盘。地标与城市格局参考公开资料，建筑以程序化几何重新演绎。</p><p>为了把熟悉的地方放进同一个画面，部分距离、比例与地形作了艺术化压缩。它适合欣赏和探索，不能用于实际导航。</p><div id="about-scope" class="about-scope" hidden><strong>本图的布局与分区</strong><p id="scope-detail"></p><a id="scope-source" target="_blank" rel="noreferrer" hidden></a></div><div class="about-controls"><strong>操作小记</strong><p>点击地标：飞到近处<br>拖动：旋转视角 · 右键：平移<br>滚轮或双指：缩放<br>空格：开始 / 暂停导览 · Esc：回到全景<br>数字 1–4：切换城市</p></div><p class="source-note">灵感来自 <a href="https://x.com/NFT_Chen/status/2096143589151756638" target="_blank" rel="noreferrer">SuSu 的杭州 Three.js 演示 ↗</a>。<br>这些城市的模型与交互在本项目独立制作。</p></dialog>
   </main>
   <script type="module" src="/src/main.js"></script>
 </body>

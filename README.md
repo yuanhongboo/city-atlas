@@ -1,11 +1,13 @@
-# 城间漫游：成都与重庆
+# 城间漫游：成都、重庆、深圳与香港
 
-两座可交互的 Three.js 微缩城市。以程序化建筑表现成都的平原街巷、锦江和园林，以及重庆的两江、山地台阶、桥梁和立体交通。
+四座可交互的 Three.js 微缩城市。以程序化建筑表现成都的街巷园林、重庆的两江山城、深圳的湾畔天际线，以及香港的海港与山地。
 
 ## 在线浏览
 
 - [成都地图](https://yuanhongboo.github.io/city-atlas/?city=chengdu&light=day)
 - [重庆地图](https://yuanhongboo.github.io/city-atlas/?city=chongqing&light=day)
+- [深圳地图](https://yuanhongboo.github.io/city-atlas/?city=shenzhen&light=day)
+- [香港地图](https://yuanhongboo.github.io/city-atlas/?city=hongkong&light=day)
 - [重庆大学城](https://yuanhongboo.github.io/city-atlas/?city=chongqing&light=day&place=university-town)
 
 ## 启动
@@ -17,7 +19,7 @@ npm install
 npm run dev
 ```
 
-打开终端显示的本地地址。成都入口为 `?city=chengdu`，重庆入口为 `?city=chongqing`。加入 `&light=day`、`&light=sunset`、`&light=night` 可指定光线；加入 `&place=hongyadong` 等地标 ID 可直接飞到该处。
+打开终端显示的本地地址。城市入口为 `?city=chengdu`、`?city=chongqing`、`?city=shenzhen` 和 `?city=hongkong`。加入 `&light=day`、`&light=sunset`、`&light=night` 可指定光线；加入 `&place=hongyadong` 等地标 ID 可直接飞到该处。
 
 ```sh
 npm run verify
@@ -27,7 +29,7 @@ npm run preview
 
 `dist/` 是构建后的静态网站，可由任意静态 HTTP 服务托管。构建产物包含全部运行依赖，不依赖外部模型、图片、字体、地图瓦片或 API 密钥。请通过 HTTP 打开，浏览器的 `file://` 限制不适合运行此模块应用。
 
-## 两座城市
+## 四座城市
 
 | 成都 | 重庆 |
 | --- | --- |
@@ -66,15 +68,38 @@ npm run preview
 
 九区地标的机构资料与造型范围见 [重庆九区地标来源](docs/重庆九区地标来源.md)。
 
-支持旋转、缩放、平移、地标飞行、三种光线、逐站导览、自动环绕、隐藏标签和下载城市照片。点击“全部地标”可打开按片区排列的完整目录；列表下方会提示尚未显示的地点数量。手机同时提供片区按钮、完整目录和地标下拉菜单。双指用于缩放与平移。
+深圳共 **16 处地标**，按五个浏览片区组织：
 
-空格控制导览，Esc 回全景，1 和 2 切换城市。导览中操作地图会暂停导览。
+| 浏览片区 | 地标 |
+| --- | --- |
+| 福田中轴 | 平安金融中心、市民中心、莲花山、华强北 |
+| 罗湖街巷 | 地王大厦、京基 100、东门老街 |
+| 南山后海 | 人才公园、春笋、深圳大学、世界之窗 |
+| 宝安前海 | 欢乐港湾、前海 |
+| 东部山海 | 大梅沙、大鹏所城、大运中心 |
+
+香港共 **16 处地标**，按四个浏览片区组织：
+
+| 浏览片区 | 地标 |
+| --- | --- |
+| 港岛山海 | 国际金融中心、中银大厦、太平山顶、会展中心、中环至半山自动扶梯 |
+| 九龙海滨 | 天星码头、尖沙咀钟楼、星光大道、西九文化区、环球贸易广场 |
+| 九龙街巷 | 黄大仙祠、旺角、志莲净苑 |
+| 离岛青马 | 天坛大佛、香港国际机场、青马大桥 |
+
+深圳以深圳湾海岸、福田中轴和东部山海构成沙盘；香港以维多利亚港分隔港岛与九龙，西侧另布置大屿山和机场。片区仅用于组织浏览，不代表行政边界；外围地点的距离经过压缩。官方来源和造型取舍见 [深圳地标来源](docs/深圳地标来源.md) 与 [香港地标来源](docs/香港地标来源.md)。
+
+两座新城市均支持片区直达，例如 `?city=shenzhen&region=nanshan`、`?city=hongkong&region=harbour`，以及地标直达 `?city=shenzhen&place=pingan`、`?city=hongkong&place=star-ferry`。
+
+支持旋转、缩放、平移、地标飞行、三种光线、逐站导览、自动环绕、隐藏标签和下载城市照片。点击“全部地标”可打开按片区排列的完整目录；列表下方会提示尚未显示的地点数量。手机同时提供城市选择、片区按钮或下拉框、完整目录和地标下拉菜单。双指用于缩放与平移。
+
+空格控制导览，Esc 回全景，数字 1–4 按成都、重庆、深圳、香港顺序切换城市。导览中操作地图会暂停导览。
 
 ## 结构
 
 - `src/main.js`：场景、灯光、相机、状态与交互。
 - `src/scene-kit.js`：建筑与地形几何工具。
-- `src/cities/chengdu.js`、`chongqing.js`：独立城市模块和地标配置。
+- `src/cities/chengdu.js`、`chongqing.js`、`shenzhen.js`、`hongkong.js`：独立城市模块和地标配置。
 - `src/cities/chengdu-south-streets.js`：天府一街至五街的道路、街区和地标数据。
 - `src/cities/chongqing-district-layout.js`：重庆九区地形、河道、区属与相机。
 - `src/cities/chongqing-district-landmarks.js`：九区新增地标的独立建筑模型。
@@ -87,7 +112,7 @@ npm run preview
 
 ## 来源与范围
 
-灵感来自 [SuSu 的杭州 Three.js 演示](https://x.com/NFT_Chen/status/2096143589151756638)，两座城市的代码、建筑和交互独立制作。地标布局与建筑特征的来源记录在 [成都资料](docs/chengdu-sources.md) 和 [重庆资料](docs/chongqing-sources.md)。
+灵感来自 [SuSu 的杭州 Three.js 演示](https://x.com/NFT_Chen/status/2096143589151756638)，四座城市的代码、建筑和交互独立制作。地标布局与建筑特征的来源记录在 [成都资料](docs/chengdu-sources.md) 和 [重庆资料](docs/chongqing-sources.md)。
 
 高新五街的机构依据另见 [天府街道来源](docs/天府街道来源.md)。这是城市印象沙盘：道路、距离、地形及建筑尺度经艺术化压缩，普通楼宇并不对应真实门牌。适合浏览、欣赏和继续扩展，不能用于实际导航。源码包含 GitHub Pages 发布工作流，也支持本地运行。
 
